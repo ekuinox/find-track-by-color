@@ -1,0 +1,105 @@
+use anyhow::{bail, Result};
+use clap::Parser;
+use futures::{pin_mut, TryStreamExt};
+use image::{DynamicImage, GenericImageView, Rgb, Rgba};
+use rspotify::{
+    model::{FullTrack, Image},
+    prelude::{BaseClient, OAuthClient},
+    scopes, AuthCodePkceSpotify, Config, Credentials, OAuth,
+};
+use std::path::{Path, PathBuf};
+use tokio::io::{AsyncWriteExt, BufWriter};
+
+#[derive(Parser, Debug)]
+enum App {
+    #[clap(name = "prepare")]
+    Prepare {
+        #[clap(short = 'd', long = "directory", default_value = "./images")]
+        directory: PathBuf,
+    },
+    Find {
+        color: String,
+        #[clap(short = 'd', long = "directory", default_value = "./images")]
+        directory: PathBuf,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let app = App::try_parse()?;
+    match app {
+        App::Prepare { directory } => prepare(directory).await?,
+        App::Find { color, directory } => {
+            let _ = color;
+            let _ = directory;
+            todo!()
+        }
+    }
+    Ok(())
+}
+
+async fn prepare(directory: PathBuf) -> Result<()> {
+    let creds = Credentials::from_env().unwrap();
+
+    let scopes = scopes!("user-library-read");
+    dbg!(&scopes);
+    let oauth = OAuth::from_env(scopes).unwrap();
+    let mut config = Config::default();
+    config.token_cached = true;
+
+    let mut spotify = AuthCodePkceSpotify::with_config(creds, oauth, config);
+
+    spotify.write_token_cache().await?;
+
+    let url = spotify.get_authorize_url(None).unwrap();
+    spotify.prompt_for_token(&url).await.unwrap();
+
+    let stream = spotify.current_user_saved_tracks(None);
+    pin_mut!(stream);
+    println!("Items (blocking):");
+
+    tokio::fs::create_dir_all(&directory).await?;
+
+    while let Ok(Some(item)) = stream.try_next().await {
+        save_track_image(&directory, &item.track).await?;
+    }
+
+    Ok(())
+}
+
+async fn save_track_image(directory: &Path, track: &FullTrack) -> Result<()> {
+    let Some(Image { url, .. }) = track.album.images.first() else { bail!("") };
+    let Some(track_id) = &track.id else { bail!("") };
+    let bytes = reqwest::get(url).await?.bytes().await?;
+    let file =
+        tokio::fs::File::create(directory.join(track_id.to_string()).with_extension("jpg")).await?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&bytes).await?;
+    Ok(())
+}
+
+/// 画像から代表になる色を一つ返す
+/// RGBそれぞれの平均をとって、合わせたものを代表としている
+#[allow(unused)]
+fn get_one_color_by_image(img: DynamicImage) -> Rgb<u8> {
+    let colors = img
+        .pixels()
+        .map(|(_, _, color)| color)
+        .into_iter()
+        .collect::<Vec<_>>();
+    let colors_len = colors.len();
+    let r = colors
+        .iter()
+        .fold(0usize, |sum, Rgba(color)| sum + color[0] as usize)
+        / colors_len;
+    let g = colors
+        .iter()
+        .fold(0usize, |sum, Rgba(color)| sum + color[1] as usize)
+        / colors_len;
+    let b = colors
+        .iter()
+        .fold(0usize, |sum, Rgba(color)| sum + color[2] as usize)
+        / colors_len;
+    let color = Rgb([r as u8, g as u8, b as u8]);
+    color
+}
