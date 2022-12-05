@@ -12,11 +12,13 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 
 #[derive(Parser, Debug)]
 enum App {
+    /// 保存済みトラック一覧からアルバム画像をわんさかダウンロードする
     #[clap(name = "prepare")]
     Prepare {
         #[clap(short = 'd', long = "directory", default_value = "./images")]
         directory: PathBuf,
     },
+    /// 色を指定して近いアルバムを見つける
     Find {
         color: String,
         #[clap(short = 'd', long = "directory", default_value = "./images")]
@@ -60,6 +62,7 @@ async fn prepare(directory: PathBuf) -> Result<()> {
 
     tokio::fs::create_dir_all(&directory).await?;
 
+    // 並列にやれるようにしたいね
     while let Ok(Some(item)) = stream.try_next().await {
         save_track_image(&directory, &item.track).await?;
     }
@@ -67,6 +70,7 @@ async fn prepare(directory: PathBuf) -> Result<()> {
     Ok(())
 }
 
+/// とりあえず画像を保存しまくる
 async fn save_track_image(directory: &Path, track: &FullTrack) -> Result<()> {
     let Some(Image { url, .. }) = track.album.images.first() else { bail!("") };
     let Some(track_id) = &track.id else { bail!("") };
@@ -80,6 +84,7 @@ async fn save_track_image(directory: &Path, track: &FullTrack) -> Result<()> {
 
 /// 画像から代表になる色を一つ返す
 /// RGBそれぞれの平均をとって、合わせたものを代表としている
+/// https://artteknika.hatenablog.com/entry/2019/09/17/151412
 #[allow(unused)]
 fn get_one_color_by_image(img: DynamicImage) -> Rgb<u8> {
     let colors = img
