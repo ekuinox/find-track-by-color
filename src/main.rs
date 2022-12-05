@@ -7,8 +7,28 @@ use rspotify::{
     prelude::{BaseClient, OAuthClient},
     scopes, AuthCodePkceSpotify, Config, Credentials, OAuth,
 };
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tokio::io::{AsyncWriteExt, BufWriter};
+
+#[derive(Clone, Debug)]
+struct Color(u8, u8, u8);
+
+impl FromStr for Color {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<css_color::Srgb>() {
+            Ok(c) => Ok(Color(
+                (c.red * u8::MAX as f32) as u8,
+                (c.green * u8::MAX as f32) as u8,
+                (c.blue * u8::MAX as f32) as u8,
+            )),
+            Err(_) => bail!("nanjakore"),
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 enum App {
@@ -20,7 +40,7 @@ enum App {
     },
     /// 色を指定して近いアルバムを見つける
     Find {
-        color: String,
+        color: Color,
         #[clap(short = 'd', long = "directory", default_value = "./images")]
         directory: PathBuf,
     },
@@ -32,8 +52,7 @@ async fn main() -> Result<()> {
     match app {
         App::Prepare { directory } => prepare(directory).await?,
         App::Find { color, directory } => {
-            let _ = color;
-            let _ = directory;
+            dbg!(color, directory);
             todo!()
         }
     }
@@ -85,6 +104,7 @@ async fn save_track_image(directory: &Path, track: &FullTrack) -> Result<()> {
 /// 画像から代表になる色を一つ返す
 /// RGBそれぞれの平均をとって、合わせたものを代表としている
 /// https://artteknika.hatenablog.com/entry/2019/09/17/151412
+/// https://crates.io/crates/kmeans_colors 使えるかも?
 #[allow(unused)]
 fn get_one_color_by_image(img: DynamicImage) -> Rgb<u8> {
     let colors = img
