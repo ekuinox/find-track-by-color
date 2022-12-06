@@ -46,8 +46,8 @@ enum App {
         color: Color,
         #[clap(short = 'd', long = "directory", default_value = "./images")]
         directory: PathBuf,
-        #[clap(short = 't', long = "threshold", default_value = "10")]
-        threshold: u8,
+        #[clap(short = 't', long = "threshold", default_value = "0.5")]
+        threshold: f64,
         #[clap(short = 'l', long = "limit", default_value = "10")]
         limit: usize,
     },

@@ -18,7 +18,7 @@ use std::{
 
 #[derive(derive_new::new, Debug)]
 pub struct Finder<SPOTIFY: BaseClient> {
-    threshold: u8,
+    threshold: f64,
     target_color: Color,
     limit: usize,
     directory: PathBuf,
@@ -55,17 +55,16 @@ impl<SPOTIFY: BaseClient> Finder<SPOTIFY> {
 
         let tasks = results
             .into_iter()
-            .filter(|(path, color)| {
-                println!("{path:?}");
-                let Rgb(diff) = color_diff(&target_color, color);
-                diff.into_iter().all(|c| c < self.threshold)
+            .filter(|(_, colors)| {
+                let diffs = colors.into_iter().filter(|(_, per)| *per >= 0.1).map(|(color, per)| (color_diff(&target_color, color), per)).collect::<Vec<_>>();
+                diffs.into_iter().any(|(diff, _)| diff < self.threshold)
             })
             .flat_map(|(path, _)| track_id_by_image_path(&path))
             .map(|track_id| get_track(&self.spotify, track_id));
         let results = futures::future::join_all(tasks).await;
         let tracks = results.into_iter().flatten();
         for track in tracks {
-            println!("{} ... {:?}", track.name, track.preview_url);
+            println!("{} ... {:?}", track.name, track.id);
         }
         Ok(())
     }
@@ -83,24 +82,27 @@ fn track_id_by_image_path(path: &Path) -> Result<TrackId> {
     Ok(track_id)
 }
 
-fn get_color_by_entry(finder: &FindColors, entry: &DirEntry) -> Result<Rgb<u8>> {
+fn get_color_by_entry(finder: &FindColors, entry: &DirEntry) -> Result<Vec<(Rgb<u8>, f32)>> {
     let path = entry.path();
     let img = image::open(&path)?;
     let colors = finder.get_colors(img);
-    let Some((color, _)) = colors.first() else { bail!("not found color") };
-    Ok(*color)
+    Ok(colors)
 }
 
-fn diff(a: u8, b: u8) -> u8 {
-    if a > b {
-        a - b
-    } else {
-        b - a
-    }
+fn diff(a: u8, b: u8) -> f64 {
+    let a = a as f64;
+    let b = b as f64;
+    let a = a / (u8::MAX as f64);
+    let b = b / (u8::MAX as f64);
+    a - b
 }
 
-fn color_diff(Rgb([a_r, a_g, a_b]): &Rgb<u8>, Rgb([b_r, b_g, b_b]): &Rgb<u8>) -> Rgb<u8> {
-    Rgb([diff(*a_r, *b_r), diff(*a_g, *b_g), diff(*a_b, *b_b)])
+fn color_diff(Rgb([a_r, a_g, a_b]): &Rgb<u8>, Rgb([b_r, b_g, b_b]): &Rgb<u8>) -> f64 {
+    let d_r = diff(*a_r, *b_r);
+    let d_g = diff(*a_g, *b_g);
+    let d_b = diff(*a_b, *b_b);
+    let x = (d_r.powf(2.0) + d_g.powf(2.0) + d_b.powf(2.0)).sqrt() / 3.0f64.sqrt();
+    x.abs()
 }
 
 #[derive(derive_builder::Builder, Debug)]
@@ -129,7 +131,6 @@ impl FindColors {
             .map(|x| x.into_format::<f32>().into_color())
             .collect();
 
-        // Iterate over the runs, keep the best results
         let mut result = Kmeans::new();
         for i in 0..self.runs {
             let run_result = get_kmeans(
