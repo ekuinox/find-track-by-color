@@ -58,12 +58,10 @@ impl<SPOTIFY: BaseClient> Finder<SPOTIFY> {
         let tasks = results
             .into_iter()
             .flat_map(|(path, colors)| {
-                let diffs = colors
+                colors
                     .into_iter()
                     .filter(|(_, per)| *per >= 0.1)
                     .map(|(color, per)| (color_diff(&target_color, &color), per))
-                    .collect::<Vec<_>>();
-                diffs
                     .into_iter()
                     .find(|(diff, _)| *diff < self.threshold)
                     .map(|(diff, per)| (path, diff, per))
@@ -148,8 +146,7 @@ impl FindColors {
     fn get_colors(&self, img: DynamicImage) -> Vec<(Rgb<u8>, f32)> {
         let bytes = img
             .pixels()
-            .map(|(_, _, Rgba([r, g, b, _]))| [r, g, b])
-            .flatten()
+            .flat_map(|(_, _, Rgba([r, g, b, _]))| [r, g, b])
             .collect::<Vec<u8>>();
         let lab: Vec<Lab> = Srgb::from_raw_slice(&bytes)
             .iter()
@@ -179,7 +176,7 @@ impl FindColors {
                 (Rgb([color.red, color.green, color.blue]), per)
             })
             .collect::<Vec<_>>();
-        colors.sort_by(|(_, a), (_, b)| b.partial_cmp(&a).unwrap_or(Ordering::Equal));
+        colors.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(Ordering::Equal));
         colors
     }
 }

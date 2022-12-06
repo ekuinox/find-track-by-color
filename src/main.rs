@@ -66,7 +66,7 @@ enum App {
         /// kmeansのクラスタ数
         #[clap(long = "clusters", default_value = "8")]
         clusters: usize,
-        
+
         /// kmeansの最大イテレーション数
         #[clap(long = "max-iter", default_value = "20")]
         max_iter: usize,
@@ -87,7 +87,6 @@ enum App {
         #[clap(short = 'v', long = "verbose")]
         verbose: bool,
     },
-    
 }
 
 #[tokio::main]
