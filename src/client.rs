@@ -8,7 +8,6 @@ pub async fn get_client() -> Result<impl BaseClient + OAuthClient> {
     let Some(creds) = Credentials::from_env() else { bail!("Credentials::from_env failed.") };
 
     let scopes = scopes!("user-library-read");
-    dbg!(&scopes);
     let Some(oauth) = OAuth::from_env(scopes) else { bail!("OAuth::from_env failed.") };
     let mut config = Config::default();
     config.token_cached = true;
