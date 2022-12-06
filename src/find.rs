@@ -23,6 +23,8 @@ pub struct Finder<SPOTIFY: BaseClient> {
     limit: usize,
     directory: PathBuf,
     finder: FindColors,
+    #[allow(unused)]
+    verbose: bool,
     spotify: SPOTIFY,
 }
 

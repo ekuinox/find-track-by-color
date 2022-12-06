@@ -35,28 +35,68 @@ impl From<Color> for Rgb<u8> {
 
 #[derive(Parser, Debug)]
 enum App {
+    /// ログインするだけをやる
+    #[clap(name = "login")]
+    Login,
     /// 保存済みトラック一覧からアルバム画像をわんさかダウンロードする
     #[clap(name = "prepare")]
     Prepare {
+        /// 画像を保存するディレクトリ
         #[clap(short = 'd', long = "directory", default_value = "./images")]
         directory: PathBuf,
     },
     /// 色を指定して近いアルバムを見つける
+    #[clap(name = "find")]
     Find {
+        /// 検索したい色
         color: Color,
+
+        /// 画像を保存したディレクトリ
         #[clap(short = 'd', long = "directory", default_value = "./images")]
         directory: PathBuf,
+
+        /// 色差がこの値以下であれば、ヒットとする
         #[clap(short = 't', long = "threshold", default_value = "0.5")]
         threshold: f64,
-        #[clap(short = 'l', long = "limit", default_value = "10")]
+
+        /// 画像ディレクトリから使用するファイル数の上限
+        #[clap(short = 'l', long = "limit", default_value = "100")]
         limit: usize,
+
+        /// kmeansのクラスタ数
+        #[clap(long = "clusters", default_value = "8")]
+        clusters: usize,
+        
+        /// kmeansの最大イテレーション数
+        #[clap(long = "max-iter", default_value = "20")]
+        max_iter: usize,
+
+        /// kmeansのスコアを評価する回数
+        #[clap(long = "runs", default_value = "1")]
+        runs: usize,
+
+        /// kmeansのシード値
+        #[clap(long = "seed", default_value = "0")]
+        seed: usize,
+
+        /// kmeansのcoverage ?
+        #[clap(long = "coverage", default_value = "0.0025")]
+        coverage: f32,
+
+        /// 出力を冗長にするやつ
+        #[clap(short = 'v', long = "verbose")]
+        verbose: bool,
     },
+    
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let app = App::try_parse()?;
     match app {
+        App::Login => {
+            let _client = get_client().await?;
+        }
         App::Prepare { directory } => {
             let client = get_client().await?;
             prepare(client, directory).await?;
@@ -66,17 +106,23 @@ async fn main() -> Result<()> {
             directory,
             threshold,
             limit,
+            clusters,
+            max_iter,
+            runs,
+            coverage,
+            seed,
+            verbose,
         } => {
             let finder = FindColors::builder()
-                .k(5)
-                .runs(1)
-                .coverage(0.0025)
-                .max_iter(20)
-                .verbose(false)
-                .seed(0)
+                .k(clusters)
+                .runs(runs)
+                .coverage(coverage)
+                .max_iter(max_iter)
+                .verbose(verbose)
+                .seed(seed)
                 .build()?;
             let client = get_client().await?;
-            let finder = Finder::new(threshold, color, limit, directory, finder, client);
+            let finder = Finder::new(threshold, color, limit, directory, finder, verbose, client);
             finder.find().await?;
         }
     }
