@@ -55,19 +55,42 @@ impl<SPOTIFY: BaseClient> Finder<SPOTIFY> {
 
         let tasks = results
             .into_iter()
-            .filter(|(_, colors)| {
-                let diffs = colors.into_iter().filter(|(_, per)| *per >= 0.1).map(|(color, per)| (color_diff(&target_color, color), per)).collect::<Vec<_>>();
-                diffs.into_iter().any(|(diff, _)| diff < self.threshold)
+            .flat_map(|(path, colors)| {
+                let diffs = colors
+                    .into_iter()
+                    .filter(|(_, per)| *per >= 0.1)
+                    .map(|(color, per)| (color_diff(&target_color, &color), per))
+                    .collect::<Vec<_>>();
+                diffs
+                    .into_iter()
+                    .find(|(diff, _)| *diff < self.threshold)
+                    .map(|(diff, per)| (path, diff, per))
             })
-            .flat_map(|(path, _)| track_id_by_image_path(&path))
-            .map(|track_id| get_track(&self.spotify, track_id));
+            .flat_map(|(path, diff, per)| {
+                track_id_by_image_path(&path).map(|id| (id, path, diff, per))
+            })
+            .map(|(track_id, path, diff, per)| {
+                get_track_with_scores(&self.spotify, track_id.clone(), (track_id, path, diff, per))
+            });
         let results = futures::future::join_all(tasks).await;
-        let tracks = results.into_iter().flatten();
-        for track in tracks {
-            println!("{} ... {:?}", track.name, track.id);
+        let mut tracks = results.into_iter().flatten().collect::<Vec<_>>();
+        tracks.sort_by(|(_, (_, _, a, _)), (_, (_, _, b, _))| {
+            b.partial_cmp(a).unwrap_or(Ordering::Equal)
+        });
+        for (track, (id, path, diff, per)) in tracks {
+            println!("{} ... {id}, {path:?}, {diff}, {per}", track.name);
         }
         Ok(())
     }
+}
+
+async fn get_track_with_scores<S: Sized>(
+    spotify: &impl BaseClient,
+    track_id: TrackId,
+    s: S,
+) -> Result<(FullTrack, S)> {
+    let track = get_track(spotify, track_id).await?;
+    Ok((track, s))
 }
 
 async fn get_track(spotify: &impl BaseClient, track_id: TrackId) -> Result<FullTrack> {
