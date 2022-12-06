@@ -91,8 +91,8 @@ async fn find_first(color: Color, directory: PathBuf, threshold: u8) -> Result<(
         let Rgb(diff) = color_diff(target_color, color);
         if diff.into_iter().all(|c| c < threshold) {
             dbg!(entry.file_name(), diff);
-            let track_id = PathBuf::from(entry.file_name()).with_extension("").to_string_lossy().to_string();
-            let track_id = TrackId::from_str(&track_id)?;
+            let track_id = PathBuf::from(entry.file_name()).with_extension("");
+            let track_id = TrackId::from_str(&track_id.to_string_lossy())?;
             let track = spotify.track(&track_id).await?;
 
             println!("track: {}", track.name);
