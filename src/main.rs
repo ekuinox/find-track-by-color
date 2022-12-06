@@ -5,7 +5,7 @@ mod prepare;
 use anyhow::{bail, Result};
 use clap::Parser;
 use client::get_client;
-use find::Finder;
+use find::{FindColors, Finder};
 use image::Rgb;
 use prepare::prepare;
 use std::{path::PathBuf, str::FromStr};
@@ -67,8 +67,16 @@ async fn main() -> Result<()> {
             threshold,
             limit,
         } => {
+            let finder = FindColors::builder()
+                .k(5)
+                .runs(1)
+                .coverage(0.0025)
+                .max_iter(20)
+                .verbose(false)
+                .seed(0)
+                .build()?;
             let client = get_client().await?;
-            let finder = Finder::new(threshold, color, limit, directory, client);
+            let finder = Finder::new(threshold, color, limit, directory, finder, client);
             finder.find().await?;
         }
     }
